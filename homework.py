@@ -13,7 +13,6 @@ import time
 from http import HTTPStatus
 
 from dotenv import load_dotenv
-
 import requests
 import telegram
 
@@ -36,8 +35,6 @@ HOMEWORK_VERDICTS = {
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
-
-HOMEWORK_KEYS = ('status', 'homework_name',)
 
 
 def check_tokens():
@@ -85,12 +82,15 @@ def get_api_answer(timestamp) -> dict:
                  '{headers}, {params}'.format(**REQUEST))
     try:
         response: requests.models.Response = requests.get(**REQUEST)
-        if (response.status_code != HTTPStatus.OK):
+        if response.status_code != HTTPStatus.OK:
             raise InvalidResponseCode(
-                response.status_code, response.reason, response.text)
+                response.status_code,
+                response.reason,
+                response.text,
+                'Ошибка в получении данных от API'
+            )
         return response.json()
-    except requests.RequestException as error:
-        logger.debug(error)
+    except Exception:
         raise ConnectionError('Ошибка подключения "{url}", {headers}, {params}'
                               .format(**REQUEST))
 
@@ -99,17 +99,12 @@ def check_response(response):
     """Проверяет ответ API на соответствие документации."""
     logger.debug('Начинаем проверять ответ API ЯП')
     if not isinstance(response, dict):
-        raise TypeError
+        raise TypeError('Полученный ответ не является словарём')
     homeworks = response.get('homeworks')
     if not homeworks:
         raise EmptyResponseFromAPI('Пришёл пустой ответ от API')
     if not isinstance(homeworks, list):
-        raise TypeError
-    # if len(homeworks) == 0:
-    #     raise ValueError('Отсутствие данных в ключе "homeworks" в ответеAPI')
-    for elem in HOMEWORK_KEYS:
-        if homeworks[0].get(elem) is None:
-            raise KeyError(f'Отсутствие ключа "{elem}" в ответе API')
+        raise TypeError('Полученный ответ не является списком')
     logger.info('Ожидаемые ключи найдены в ответе API')
     return homeworks
 
@@ -150,29 +145,25 @@ def main():
                 current_report['name'] = homework['homework_name']
                 current_report['message'] = parse_status(homework)
             else:
-                logger.debug('Отсутствие в ответе новых статусов')
+                current_report['message'] = ('Отсутствие в ответе новых'
+                                             ' статусов')
             if current_report != prev_report:
-                sent = send_message(bot, current_report['message'])
-            if sent:
-                prev_report = current_report.copy()
-                timestamp = response.get('current_date', timestamp)
+                if send_message(bot, current_report['message']):
+                    prev_report = current_report.copy()
+                    timestamp = response.get('current_date', timestamp)
             else:
                 logger.debug('Отсутствие в ответе новых статусов')
 
         except EmptyResponseFromAPI as error:
-            logger.error(error)
+            logger.exception(error)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             current_report['message'] = message
-            logger.error(message)
+            logger.exception(message)
             if current_report != prev_report:
-                sent = send_message(bot, current_report['message'])
-            if sent:
-                prev_report = current_report.copy()
-            else:
-                logger.error('Ошибка отправки сообщения об ошибке')
-
+                if send_message(bot, current_report['message']):
+                    prev_report = current_report.copy()
         finally:
             time.sleep(RETRY_PERIOD)
 
@@ -186,13 +177,10 @@ if __name__ == '__main__':
         format=formatter
     )
     handler = logging.StreamHandler(stream=sys.stdout)
-    file_handler = logging.FileHandler(__file__ + '.log')
+    file_handler = logging.FileHandler(__file__ + '.log', encoding='UTF-8')
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(logging.Formatter(formatter))
     logger.addHandler(handler)
     logger.addHandler(file_handler)
 
-    try:
-        main()
-    except KeyboardInterrupt:
-        logger.info('Останов программы ***************')
+    main()
