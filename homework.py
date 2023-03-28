@@ -162,8 +162,8 @@ def main():
             current_report['message'] = message
             logger.exception(message)
             if current_report != prev_report:
-                if send_message(bot, current_report['message']):
-                    prev_report = current_report.copy()
+                send_message(bot, current_report['message'])
+                prev_report = current_report.copy()
         finally:
             time.sleep(RETRY_PERIOD)
 
