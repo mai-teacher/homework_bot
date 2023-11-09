@@ -155,12 +155,12 @@ def main():
                 logger.debug('Отсутствие в ответе новых статусов')
 
         except EmptyResponseFromAPI as error:
-            logger.exception(error)
+            logger.error(error)
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             current_report['message'] = message
-            logger.exception(message)
+            logger.error(message)
             if current_report != prev_report:
                 send_message(bot, current_report['message'])
                 prev_report = current_report.copy()
@@ -183,4 +183,7 @@ if __name__ == '__main__':
     logger.addHandler(handler)
     logger.addHandler(file_handler)
 
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info('Останов программы ***************')
